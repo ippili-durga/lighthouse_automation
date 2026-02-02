@@ -3,7 +3,7 @@
     "collect": {
       "numberOfRuns": 3,
       "url": [
-        "https://petstore.octoperf.com"
+        "https://jpetstore.aspectran.com/"
       ],
       "settings": {
         "preset": "desktop",

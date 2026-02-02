@@ -3,7 +3,7 @@
     "collect": {
       "numberOfRuns": 3,
       "url": [
-        "https://petstore.octoperf.com"
+        "https://petstore.octoperf.com/actions/Catalog.action"
       ],
       "settings": {
         "preset": "desktop",

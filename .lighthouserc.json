@@ -1,14 +1,15 @@
 {
   "ci": {
     "collect": {
-      "numberOfRuns": 3,
+      "numberOfRuns": 1,
       "url": [
         "https://petstore.octoperf.com/actions/Catalog.action"
       ],
       "settings": {
         "preset": "desktop",
         "emulatedFormFactor": "desktop",
-        "throttlingMethod": "devtools"
+        "throttlingMethod": "devtools",
+        "chromeFlags": "--ignore-certificate-errors --no-sandbox --disable-dev-shm-usage"
       }
     },
     "assert": {

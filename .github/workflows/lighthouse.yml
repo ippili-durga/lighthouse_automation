@@ -51,7 +51,7 @@ jobs:
             lhci autorun --collect.numberOfRuns=3 --upload.target=temporary-public-storage
           else
             lhci autorun \
-              --collect.url="https://YOUR-WEB-URL.com/" \
+              --collect.url="https://petstore.octoperf.com/actions/Catalog.action" \
               --collect.numberOfRuns=3 \
               --upload.target=temporary-public-storage
           fi

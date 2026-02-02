@@ -10,67 +10,60 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # Ensure Chrome is available for Lighthouse runs
-      - name: Setup Chrome
-        uses: browser-actions/setup-chrome@v1
-
-      - name: Verify Chrome
-        run: |
-          which google-chrome-stable || which chrome || true
-          google-chrome --version || google-chrome-stable --version || true
-
-      - name: Install deps (if needed for monorepo/workspaces)
-        run: npm ci || npm i
+      - uses: browser-actions/setup-chrome@v1
 
       - name: Install LHCI
         run: npm i -g @lhci/cli@0.13.x
 
-      # OPTION A: Use your committed lighthouserc.json (recommended if you already ran locally)
-      - name: Check LHCI config file
-        run: |
-          if [ -f "lighthouserc.json" ]; then
-            echo "Found lighthouserc.json:"
-            cat lighthouserc.json
-          else
-            echo "lighthouserc.json not found. Will run with inline URL instead."
-          fi
-
-      # OPTION B: If you do NOT have lighthouserc.json, set your URL here:
-      # Replace the URL below or remove the flags if you have lighthouserc.json
       - name: Run Lighthouse CI
         run: |
-          if [ -f "lighthouserc.json" ]; then
-            lhci autorun --collect.numberOfRuns=3 --upload.target=temporary-public-storage
-          else
-            lhci autorun \
-              --collect.url="https://petstore.octoperf.com/actions/Catalog.action" \
-              --collect.numberOfRuns=3 \
-              --upload.target=temporary-public-storage
-          fi
+          lhci autorun \
+            --collect.numberOfRuns=3 \
+            --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage --ignore-certificate-errors" \
+            --upload.target=temporary-public-storage
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List generated files
+      - name: List LHCI output
         if: always()
         run: |
-          echo "Contents of .lighthouseci directory:"
+          echo "Contents of .lighthouseci:"
           ls -la .lighthouseci || true
-          echo "All files (root):"
-          ls -la
 
-      - name: Upload Lighthouse Reports (JSON + HTML if present)
+      # === HTML generation from LHCI JSON ===
+      - name: Generate HTML reports
+        if: always()
+        run: |
+          npm i lighthouse@11 --no-save
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const { ReportGenerator } = require('lighthouse/report/generator/report-generator.js');
+          const dir = '.lighthouseci';
+          if (!fs.existsSync(dir)) { console.log('No .lighthouseci directory'); process.exit(0); }
+          const jsons = fs.readdirSync(dir).filter(f => f.endsWith('-lhr.json'));
+          if (!jsons.length) { console.log('No LHR JSON files found'); process.exit(0); }
+          for (const file of jsons) {
+            const lhrPath = path.join(dir, file);
+            const base = file.replace(/\.json$/, '');
+            const htmlPath = path.join(dir, `${base}.html`);
+            const lhr = JSON.parse(fs.readFileSync(lhrPath, 'utf8'));
+            const html = ReportGenerator.generateReportHtml(lhr);
+            fs.writeFileSync(htmlPath, html);
+            console.log('Generated', htmlPath);
+          }
+          NODE
+
+      - name: Upload Lighthouse Reports (JSON + HTML)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-reports
-          path: |
-            .lighthouseci/**
+          path: .lighthouseci/**
           if-no-files-found: warn

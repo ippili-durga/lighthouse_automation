@@ -6,33 +6,71 @@ on:
   pull_request:
 
 jobs:
-  lhci:
+  lighthouse:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
 
-      - name: Install dependencies
+      # Ensure Chrome is available for Lighthouse runs
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Verify Chrome
+        run: |
+          which google-chrome-stable || which chrome || true
+          google-chrome --version || google-chrome-stable --version || true
+
+      - name: Install deps (if needed for monorepo/workspaces)
         run: npm ci || npm i
 
-      - name: Install Lighthouse CI
+      - name: Install LHCI
         run: npm i -g @lhci/cli@0.13.x
 
+      # OPTION A: Use your committed lighthouserc.json (recommended if you already ran locally)
+      - name: Check LHCI config file
+        run: |
+          if [ -f "lighthouserc.json" ]; then
+            echo "Found lighthouserc.json:"
+            cat lighthouserc.json
+          else
+            echo "lighthouserc.json not found. Will run with inline URL instead."
+          fi
+
+      # OPTION B: If you do NOT have lighthouserc.json, set your URL here:
+      # Replace the URL below or remove the flags if you have lighthouserc.json
       - name: Run Lighthouse CI
         run: |
-          lhci autorun --upload.target=temporary-public-storage --collect.numberOfRuns=3
+          if [ -f "lighthouserc.json" ]; then
+            lhci autorun --collect.numberOfRuns=3 --upload.target=temporary-public-storage
+          else
+            lhci autorun \
+              --collect.url="https://YOUR-WEB-URL.com/" \
+              --collect.numberOfRuns=3 \
+              --upload.target=temporary-public-storage
+          fi
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload HTML reports as artifact
+      - name: List generated files
+        if: always()
+        run: |
+          echo "Contents of .lighthouseci directory:"
+          ls -la .lighthouseci || true
+          echo "All files (root):"
+          ls -la
+
+      - name: Upload Lighthouse Reports (JSON + HTML if present)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-reports
-          path: ".lighthouseci/*"
+          path: |
+            .lighthouseci/**
+          if-no-files-found: warn

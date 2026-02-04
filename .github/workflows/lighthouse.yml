@@ -2,7 +2,7 @@ name: Lighthouse CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
   pull_request:
 
 jobs:
@@ -13,26 +13,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci || npm i
+        run: npm ci
 
-      - name: Install Lighthouse CI
-        run: npm i -g @lhci/cli@0.13.x
+      # 👉 Adjust this if your project uses a different build command
+      - name: Build
+        run: npm run build
 
+      # Run LHCI. It will write outputs to `.lighthouseci/` per .lighthouserc.json
       - name: Run Lighthouse CI
-        run: |
-          lhci autorun --upload.target=temporary-public-storage --collect.numberOfRuns=1
-        env:
-          LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx lhci autorun
 
-      - name: Upload HTML reports as artifact
+      # Debug listing so we can see what exists even on failure
+      - name: List workspace & LHCI outputs
+        if: always()
+        run: |
+          echo "=== workspace (top-level) ==="
+          ls -la
+          echo "=== .lighthouseci contents ==="
+          ls -la .lighthouseci || true
+          echo "=== build/dist contents (common names) ==="
+          ls -la build || true
+          ls -la dist || true
+
+      # Upload artifacts (recursive glob to include all files)
+      - name: Upload Lighthouse results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lighthouse-reports
-          path: ".lighthouseci/*"
+          name: lighthouse-report
+          path: .lighthouseci/**

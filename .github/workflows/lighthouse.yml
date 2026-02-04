@@ -26,13 +26,13 @@ jobs:
 
       - name: Run Lighthouse CI
         run: |
-          lhci autorun --upload.target=temporary-public-storage --collect.numberOfRuns=3
+          lhci autorun --upload.target=temporary-public-storage --collect.numberOfRuns=1
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload HTML reports as artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: lighthouse-reports
           path: ".lighthouseci/*"

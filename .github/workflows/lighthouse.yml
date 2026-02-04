@@ -1,33 +1,85 @@
 name: Lighthouse CI
+
 on:
-  pull_request:
+  workflow_dispatch:
   push:
     branches: [ main ]
+  pull_request:
 
 jobs:
   lhci:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (CI only)
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install deps
-        run: npm ci
-      - name: Wait for Preview / Start Server
+          cache: 'npm'
+
+      - name: Print Node/npm versions
         run: |
-          # If you have a static build server:
-          npm run build
-          npm run start & npx wait-on http://localhost:3000
-        if: ${{ github.event_name == 'pull_request' }}
-      - name: Run LHCI (Preview)
-        run: TARGET_URL=http://localhost:3000 npx lhci autorun
-        if: ${{ github.event_name == 'pull_request' }}
-      - name: Run LHCI (Prod)
-        run: TARGET_URL=https://example.com npx lhci autorun
-        if: ${{ github.event_name != 'pull_request' }}
-      - name: Upload artifacts
+          node -v
+          npm -v
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Verify Chrome
+        run: |
+          google-chrome --version || chromium --version || echo "Chrome not found in PATH"
+
+      # Optional: if you suspect registry/proxy issues, uncomment and set your registry
+      # - name: Configure npm registry (optional)
+      #   run: |
+      #     npm config set registry https://registry.npmjs.org/
+      #     npm config set fetch-retries 5
+      #     npm config set fetch-retry-maxtimeout 120000
+      #     npm config set fetch-retry-mintimeout 2000
+
+      - name: Verify LHCI via npx (no global install)
+        run: npx --yes @lhci/cli@0.14.x --version
+
+      - name: Run Lighthouse CI
+        id: run_lhci
+        shell: bash
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          npx --yes @lhci/cli@0.14.x autorun --config=.lighthouserc.json
+          EXIT_CODE=$?
+          echo "LHCI_EXIT_CODE=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          echo "LHCI finished with exit code: $EXIT_CODE"
+          # Continue so we can collect artifacts even if assertions fail
+          exit 0
+
+      - name: List LHCI output (debug)
+        if: always()
+        run: |
+          echo "Workspace:"
+          ls -la
+          echo "Contents of .lighthouseci:"
+          ls -la .lighthouseci || true
+
+      - name: Upload Lighthouse artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-reports
-          path: lhci_reports/**
+          path: |
+            .lighthouseci/*.html
+            .lighthouseci/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      # Re-fail the job only if you want CI to be red when LHCI failed
+      - name: Fail the job if LHCI exit code was non-zero (optional)
+        if: ${{ steps.run_lhci.outputs.LHCI_EXIT_CODE != '' && steps.run_lhci.outputs.LHCI_EXIT_CODE != '0' }}
+        run: |
+          echo "Failing because LHCI exit code was ${{ steps.run_lhci.outputs.LHCI_EXIT_CODE }}"
+          exit 1

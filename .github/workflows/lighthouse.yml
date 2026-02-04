@@ -1,51 +1,33 @@
 name: Lighthouse CI
-
 on:
-  push:
-    branches: [ "main", "master" ]
   pull_request:
+  push:
+    branches: [ main ]
 
 jobs:
   lhci:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
+          node-version: '20'
+      - name: Install deps
         run: npm ci
-
-      # 👉 Adjust this if your project uses a different build command
-      - name: Build
-        run: npm run build
-
-      # Run LHCI. It will write outputs to `.lighthouseci/` per .lighthouserc.json
-      - name: Run Lighthouse CI
-        run: npx lhci autorun
-
-      # Debug listing so we can see what exists even on failure
-      - name: List workspace & LHCI outputs
-        if: always()
+      - name: Wait for Preview / Start Server
         run: |
-          echo "=== workspace (top-level) ==="
-          ls -la
-          echo "=== .lighthouseci contents ==="
-          ls -la .lighthouseci || true
-          echo "=== build/dist contents (common names) ==="
-          ls -la build || true
-          ls -la dist || true
-
-      # Upload artifacts (recursive glob to include all files)
-      - name: Upload Lighthouse results
-        if: always()
+          # If you have a static build server:
+          npm run build
+          npm run start & npx wait-on http://localhost:3000
+        if: ${{ github.event_name == 'pull_request' }}
+      - name: Run LHCI (Preview)
+        run: TARGET_URL=http://localhost:3000 npx lhci autorun
+        if: ${{ github.event_name == 'pull_request' }}
+      - name: Run LHCI (Prod)
+        run: TARGET_URL=https://example.com npx lhci autorun
+        if: ${{ github.event_name != 'pull_request' }}
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lighthouse-report
-          path: .lighthouseci/**
+          name: lighthouse-reports
+          path: lhci_reports/**

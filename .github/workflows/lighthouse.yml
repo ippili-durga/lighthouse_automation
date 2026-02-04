@@ -1,41 +1,38 @@
-name: Lighthouse Simple CI
+name: Lighthouse CI
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
+  pull_request:
 
 jobs:
-  lighthouse:
+  lhci:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
-      - name: Setup Chrome
-        uses: browser-actions/setup-chrome@v1
+      - name: Install dependencies
+        run: npm ci || npm i
 
       - name: Install Lighthouse CI
-        run: npm install -g @lhci/cli@0.13.x
+        run: npm i -g @lhci/cli@0.13.x
 
-      - name: Run Lighthouse (Single URL)
+      - name: Run Lighthouse CI
+        run: |
+          lhci autorun --upload.target=temporary-public-storage --collect.numberOfRuns=3
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          lhci autorun \
-            --collect.url="https://lighthouse-durga.vercel.app/" \
-            --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" \
-            --upload.target=temporary-public-storage
 
-      - name: Upload Lighthouse Artifacts
+      - name: Upload HTML reports as artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lighthouse-report
-          path: .lighthouseci
-          if-no-files-found: warn
+          name: lighthouse-reports
+          path: ".lighthouseci/*"

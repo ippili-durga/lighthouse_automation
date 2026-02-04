@@ -4,9 +4,8 @@ on:
   push:
     branches: [ main, master ]
   pull_request:
-  # Optional nightly run at 00:00 UTC (~05:30 IST)
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * *"   # Nightly at 00:00 UTC (~05:30 IST)
   workflow_dispatch:
 
 jobs:
@@ -28,9 +27,8 @@ jobs:
       - name: Setup Chrome
         uses: browser-actions/setup-chrome@v1
 
-      - name: Verify Chrome (debug)
-        run: |
-          google-chrome --version || google-chrome-stable --version || true
+      - name: Verify Chrome version
+        run: google-chrome --version || google-chrome-stable --version || true
 
       - name: Install Lighthouse CI
         run: npm i -g @lhci/cli@0.13.x
@@ -54,78 +52,33 @@ jobs:
           echo "Contents of .lighthouseci:"
           ls -la .lighthouseci || true
 
-      # Generate metrics-summary.json and metrics-summary.md from the raw LHR JSON
       - name: Generate Lighthouse Metrics Reports (JSON + MD)
         if: always()
         run: |
-          node - <<'NODE'
+          node - << 'NODE'
           const fs = require('fs');
           const path = require('path');
           const dir = '.lighthouseci';
+
           if (!fs.existsSync(dir)) {
-            console.log('No .lighthouseci directory found; skipping metrics generation.');
+            console.log('No .lighthouseci directory found; skipping.');
             process.exit(0);
           }
+
           const files = fs.readdirSync(dir).filter(f => f.endsWith('-lhr.json'));
           if (!files.length) {
-            console.log('No *-lhr.json files found; skipping metrics generation.');
+            console.log('No LHR JSON files found; skipping.');
             process.exit(0);
           }
-          // For single URL, take the first file
+
           const lhrPath = path.join(dir, files[0]);
           const lhr = JSON.parse(fs.readFileSync(lhrPath, 'utf8'));
+
           const metrics = {
             url: lhr.finalUrl,
             performance: (lhr.categories.performance?.score ?? 0) * 100,
             accessibility: (lhr.categories.accessibility?.score ?? 0) * 100,
-            best_practices: (lhr.categories['best-practices']?.score ?? 0) * 100,
+            best_practices: (lhr.categories["best-practices"]?.score ?? 0) * 100,
             seo: (lhr.categories.seo?.score ?? 0) * 100,
-            fcp_ms: lhr.audits['first-contentful-paint']?.numericValue ?? null,
-            lcp_ms: lhr.audits['largest-contentful-paint']?.numericValue ?? null,
-            tbt_ms: lhr.audits['total-blocking-time']?.numericValue ?? null,
-            cls: lhr.audits['cumulative-layout-shift']?.numericValue ?? null,
-            speedIndex_ms: lhr.audits['speed-index']?.numericValue ?? null,
-            tti_ms: lhr.audits['interactive']?.numericValue ?? null
-          };
-          fs.writeFileSync(path.join(dir, 'metrics-summary.json'), JSON.stringify(metrics, null, 2));
-
-          const md = `# Lighthouse Metrics (Single URL)
-**URL:** ${metrics.url}
-
-| Metric | Value |
-|---|---:|
-| Performance | ${metrics.performance ?? '-'} |
-| Accessibility | ${metrics.accessibility ?? '-'} |
-| Best Practices | ${metrics.best_practices ?? '-'} |
-| SEO | ${metrics.seo ?? '-'} |
-| FCP (ms) | ${metrics.fcp_ms ?? '-'} |
-| LCP (ms) | ${metrics.lcp_ms ?? '-'} |
-| TBT (ms) | ${metrics.tbt_ms ?? '-'} |
-| CLS | ${metrics.cls ?? '-'} |
-| Speed Index (ms) | ${metrics.speedIndex_ms ?? '-'} |
-| TTI (ms) | ${metrics.tti_ms ?? '-'} |
-`;
-          fs.writeFileSync(path.join(dir, 'metrics-summary.md'), md);
-          console.log('Wrote .lighthouseci/metrics-summary.json and .lighthouseci/metrics-summary.md');
-          NODE
-
-      - name: Publish Metrics in GitHub Summary
-        if: always()
-        run: |
-          echo "### Lighthouse Metrics (Single URL)" >> $GITHUB_STEP_SUMMARY
-          if [ -f ".lighthouseci/metrics-summary.md" ]; then
-            cat .lighthouseci/metrics-summary.md >> $GITHUB_STEP_SUMMARY
-          else
-            echo "_No metrics summary found._" >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Upload Metrics Artifacts (JSON + MD + raw LHR)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lighthouse-metrics
-          path: |
-            .lighthouseci/metrics-summary.json
-            .lighthouseci/metrics-summary.md
-            .lighthouseci/*-lhr.json
-          if-no-files-found: warn
+            fcp_ms: lhr.audits["first-contentful-paint"]?.numericValue ?? null,
+            lcp_ms: lhr.audits["largest-contentful-paint"]?.numericValue ?? null,

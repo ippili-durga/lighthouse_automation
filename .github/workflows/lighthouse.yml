@@ -1,19 +1,13 @@
-name: Lighthouse CI + Metrics (Single URL)
+name: Lighthouse Simple CI
 
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-  schedule:
-    - cron: "0 0 * * *"   # Nightly at 00:00 UTC (~05:30 IST)
   workflow_dispatch:
 
 jobs:
   lighthouse:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
       - name: Checkout code
@@ -27,58 +21,21 @@ jobs:
       - name: Setup Chrome
         uses: browser-actions/setup-chrome@v1
 
-      - name: Verify Chrome version
-        run: google-chrome --version || google-chrome-stable --version || true
-
       - name: Install Lighthouse CI
-        run: npm i -g @lhci/cli@0.13.x
+        run: npm install -g @lhci/cli@0.13.x
 
-      - name: Show LHCI config (debug)
-        run: |
-          echo "=== lighthouserc.json ==="
-          cat lighthouserc.json
-
-      - name: Run Lighthouse CI
+      - name: Run Lighthouse (Single URL)
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           lhci autorun \
+            --collect.url="https://lighthouse-durga.vercel.app/" \
             --collect.settings.chromeFlags="--no-sandbox --disable-dev-shm-usage" \
             --upload.target=temporary-public-storage
 
-      - name: List LHCI outputs (debug)
-        if: always()
-        run: |
-          echo "Contents of .lighthouseci:"
-          ls -la .lighthouseci || true
-
-      - name: Generate Lighthouse Metrics Reports (JSON + MD)
-        if: always()
-        run: |
-          node - << 'NODE'
-          const fs = require('fs');
-          const path = require('path');
-          const dir = '.lighthouseci';
-
-          if (!fs.existsSync(dir)) {
-            console.log('No .lighthouseci directory found; skipping.');
-            process.exit(0);
-          }
-
-          const files = fs.readdirSync(dir).filter(f => f.endsWith('-lhr.json'));
-          if (!files.length) {
-            console.log('No LHR JSON files found; skipping.');
-            process.exit(0);
-          }
-
-          const lhrPath = path.join(dir, files[0]);
-          const lhr = JSON.parse(fs.readFileSync(lhrPath, 'utf8'));
-
-          const metrics = {
-            url: lhr.finalUrl,
-            performance: (lhr.categories.performance?.score ?? 0) * 100,
-            accessibility: (lhr.categories.accessibility?.score ?? 0) * 100,
-            best_practices: (lhr.categories["best-practices"]?.score ?? 0) * 100,
-            seo: (lhr.categories.seo?.score ?? 0) * 100,
-            fcp_ms: lhr.audits["first-contentful-paint"]?.numericValue ?? null,
-            lcp_ms: lhr.audits["largest-contentful-paint"]?.numericValue ?? null,
+      - name: Upload Lighthouse Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci
+          if-no-files-found: warn
